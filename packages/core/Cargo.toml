@@ -1,0 +1,12 @@
+[package]
+name = "reverseshield-core"
+version = "0.0.0"
+edition = "2021"
+description = "ReverseShield core detection engine."
+publish = false
+
+[lib]
+name = "reverseshield_core"
+crate-type = ["rlib"]
+
+[dependencies]

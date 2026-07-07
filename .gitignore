@@ -1,0 +1,39 @@
+# Node
+node_modules/
+dist/
+build/
+*.log
+.npm/
+.pnpm-store/
+
+# Rust
+target/
+Cargo.lock
+**/*.rs.bk
+
+# PHP / Composer
+vendor/
+composer.lock
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+
+# Env / secrets
+.env
+.env.*
+!.env.example
+
+# OS / editors
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+*.swp
+
+# SQLite (v1 reporting store)
+*.sqlite
+*.sqlite-journal
+*.db

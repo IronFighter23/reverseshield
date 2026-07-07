@@ -1,0 +1,19 @@
+{
+  "name": "reverseshield",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Self-hosted, open-source bot & scraper defense with real attack visibility.",
+  "workspaces": [
+    "packages/agent-js",
+    "services/reporting/api",
+    "services/reporting/dashboard"
+  ],
+  "scripts": {
+    "lint": "npm run lint --workspaces --if-present",
+    "test": "npm run test --workspaces --if-present",
+    "build": "npm run build --workspaces --if-present"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}
