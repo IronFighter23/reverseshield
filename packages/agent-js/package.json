@@ -2,15 +2,33 @@
   "name": "@reverseshield/agent",
   "version": "0.0.0",
   "private": true,
-  "description": "ReverseShield browser agent.",
+  "description": "ReverseShield browser agent — honeypots, canary tokens, behavioral telemetry.",
   "type": "module",
   "main": "./dist/index.cjs",
   "module": "./dist/index.js",
   "types": "./dist/index.d.ts",
-  "files": ["dist"],
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js",
+      "require": "./dist/index.cjs"
+    }
+  },
+  "files": [
+    "dist",
+    "src"
+  ],
   "scripts": {
-    "lint": "echo 'agent-js lint: no-op in Phase 0' && exit 0",
-    "test": "echo 'agent-js test: no-op in Phase 0' && exit 0",
-    "build": "echo 'agent-js build: no-op in Phase 0' && exit 0"
+    "build": "node esbuild.config.mjs && tsc --emitDeclarationOnly --declaration --outDir dist",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "lint": "tsc --noEmit"
+  },
+  "devDependencies": {
+    "@types/node": "^20.14.0",
+    "esbuild": "^0.28.1",
+    "happy-dom": "^20.10.6",
+    "typescript": "^5.5.4",
+    "vitest": "^3.2.6"
   }
 }
