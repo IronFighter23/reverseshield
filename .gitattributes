@@ -1,0 +1,18 @@
+# Normalize line endings to LF for all text files.
+# This prevents CRLF/LF mismatches between Windows dev and Linux CI, and stops the noisy
+# `warning: LF will be replaced by CRLF` messages during `git add` on Windows.
+* text=auto eol=lf
+
+# Windows-native scripts keep CRLF — required by cmd.exe and PowerShell.
+*.bat text eol=crlf
+*.cmd text eol=crlf
+*.ps1 text eol=crlf
+
+# Binary files that should never be text-processed.
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.ico binary
+*.sqlite binary
+*.db binary

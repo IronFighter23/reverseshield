@@ -26,14 +26,18 @@ venv/
 .env.*
 !.env.example
 
+# SQLite (v1 reporting store) - better-sqlite3 in WAL mode produces .sqlite plus
+# -shm and -wal sidecars. All three are runtime state and must never be committed.
+*.sqlite
+*.sqlite-shm
+*.sqlite-wal
+*.sqlite-journal
+*.db
+services/reporting/api/data/
+
 # OS / editors
 .DS_Store
 Thumbs.db
 .idea/
 .vscode/
 *.swp
-
-# SQLite (v1 reporting store)
-*.sqlite
-*.sqlite-journal
-*.db

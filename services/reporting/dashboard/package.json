@@ -2,12 +2,26 @@
   "name": "@reverseshield/reporting-dashboard",
   "version": "0.0.0",
   "private": true,
-  "description": "ReverseShield reporting dashboard — React + Vite + Tailwind (per SPEC §6).",
+  "description": "ReverseShield reporting dashboard — event counts, score bands, per-site view.",
   "type": "module",
   "scripts": {
-    "lint": "echo 'reporting-dashboard lint: no-op in Phase 0' && exit 0",
-    "test": "echo 'reporting-dashboard test: no-op in Phase 0' && exit 0",
-    "build": "echo 'reporting-dashboard build: no-op in Phase 0' && exit 0",
-    "dev": "echo 'reporting-dashboard dev: no-op in Phase 0' && exit 0"
+    "dev": "vite",
+    "build": "tsc --noEmit && vite build",
+    "preview": "vite preview",
+    "lint": "tsc --noEmit",
+    "test": "echo 'dashboard test: no runtime tests in Phase 1' && exit 0"
+  },
+  "dependencies": {
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1"
+  },
+  "devDependencies": {
+    "@tailwindcss/vite": "^4.0.0",
+    "@types/react": "^18.3.10",
+    "@types/react-dom": "^18.3.0",
+    "@vitejs/plugin-react": "^4.3.1",
+    "tailwindcss": "^4.0.0",
+    "typescript": "^5.5.4",
+    "vite": "^7.0.0"
   }
 }
