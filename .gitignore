@@ -14,6 +14,9 @@ Cargo.lock
 # PHP / Composer
 vendor/
 composer.lock
+composer.phar
+.phpunit.cache/
+.phpunit.result.cache
 
 # Python
 __pycache__/
@@ -26,8 +29,8 @@ venv/
 .env.*
 !.env.example
 
-# SQLite (v1 reporting store) - better-sqlite3 in WAL mode produces .sqlite plus
-# -shm and -wal sidecars. All three are runtime state and must never be committed.
+# SQLite - better-sqlite3 in WAL mode produces .sqlite plus -shm and -wal
+# sidecars. All three are runtime state and must never be committed.
 *.sqlite
 *.sqlite-shm
 *.sqlite-wal

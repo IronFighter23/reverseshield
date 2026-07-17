@@ -39,3 +39,30 @@ jobs:
         run: cargo build --workspace
       - name: Test
         run: cargo test --workspace
+
+  php:
+    name: PHP — WordPress smoke + Laravel PHPUnit
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Set up PHP
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.2'
+          coverage: none
+          tools: composer:v2
+      - name: WordPress plugin — CLI smoke test
+        run: php packages/middleware-wordpress/test/plugin-test.php
+      - name: Cache Composer packages
+        uses: actions/cache@v4
+        with:
+          path: packages/middleware-laravel/vendor
+          key: composer-${{ hashFiles('packages/middleware-laravel/composer.json') }}
+          restore-keys: |
+            composer-
+      - name: Laravel package — composer install
+        working-directory: packages/middleware-laravel
+        run: composer install --no-progress --no-interaction --prefer-dist
+      - name: Laravel package — PHPUnit
+        working-directory: packages/middleware-laravel
+        run: vendor/bin/phpunit --colors=always
