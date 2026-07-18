@@ -90,10 +90,10 @@ pub struct Rule {
 /// A `RuleSet` can be built four ways:
 ///   * [`RuleSet::empty`]         — construct scoring-only pipelines in tests.
 ///   * [`RuleSet::from_json_str`] — for browsers and any host that receives rules
-///                                  over the wire (available in both native and WASM).
+///     over the wire (available in both native and WASM).
 ///   * [`RuleSet::from_yaml_str`] — for hosts that ship YAML inline (native only).
 ///   * [`RuleSet::load_from_path`] — for the reporting service and middlewares
-///                                   (native only).
+///     (native only).
 ///
 /// Only rule sets built from a path can be reloaded; the others return `Ok(false)`
 /// from [`RuleSet::reload_if_changed`] because there's nothing to poll.
