@@ -12,21 +12,44 @@ name = "reverseshield_core"
 # `rlib` is kept so Rust integration tests and downstream Rust consumers can link normally.
 crate-type = ["cdylib", "rlib"]
 
+# --- Features ---------------------------------------------------------------------------
+#
+# `native` gates everything that requires host-OS capabilities: YAML parsing (drags in
+# `serde_yaml` + `unsafe-libyaml`, ~50 KB gzipped once compiled to WASM), filesystem
+# access, and hot-reload mtime tracking. WASM builds pass `--no-default-features` to
+# shed all of that — the browser receives pre-parsed rules as JSON over the wire, which
+# `serde_json` (still a required dep) handles in a fraction of the code footprint.
+#
+# The `native` feature is on by default, so `cargo build` and `cargo test` from the
+# workspace root keep behaving exactly as they do today. Only the WASM build opts out.
+[features]
+default = ["native"]
+native = ["dep:serde_yaml"]
+
 [dependencies]
 serde = { version = "1.0", features = ["derive"] }
-serde_yaml = "0.9"
+serde_json = "1.0"
+serde_yaml = { version = "0.9", optional = true }
 thiserror = "1.0"
 
 # wasm-bindgen is only compiled for the wasm32 target. Native `cargo build` / `cargo test`
 # never pull it in — this avoids dragging JS-glue crates into PHP/native FFI consumers,
-# and keeps the native build under Phase 2 step 1 lean. When Phase 2 step 3 turns on WASM,
-# the wasm32-unknown-unknown target picks this up automatically; then `wasm-bindgen-cli`
+# and keeps the native build lean. When Phase 2 step 2b turns on WASM, the
+# wasm32-unknown-unknown target picks this up automatically; then `wasm-bindgen-cli`
 # is run over the resulting .wasm file (replacing the deprecated `wasm-pack` toolchain).
 [target.'cfg(target_arch = "wasm32")'.dependencies]
 wasm-bindgen = "0.2"
 
 [dev-dependencies]
 tempfile = "3"
+
+# --- Release profile --------------------------------------------------------------------
+#
+# NOTE: `[profile.release]` for this workspace lives in the *workspace root* Cargo.toml.
+# Cargo intentionally ignores `[profile.*]` sections in workspace members, and warns
+# about it if you write them here — so the actual release-profile knobs (opt-level = "z",
+# LTO, single codegen unit, panic = abort, strip) are set at the root. Documenting the
+# reason here so a future edit doesn't accidentally revive them in this file.
 
 [package.metadata.reverseshield]
 # Rules file consumed by this crate. Kept in metadata rather than a build.rs constant so

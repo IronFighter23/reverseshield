@@ -1,3 +1,22 @@
 [workspace]
 members = ["packages/core"]
 resolver = "2"
+
+# --- Release profile --------------------------------------------------------------------
+#
+# Tuned for WASM size. `opt-level = "z"` is smaller than `"s"` at a small runtime cost we
+# don't care about — scoring is nanoseconds either way. `lto = true` + `codegen-units = 1`
+# let the compiler inline across crate boundaries and drop unused code paths. `panic =
+# "abort"` removes the unwinding tables (a nontrivial fraction of any WASM binary).
+# `strip = true` drops debug symbols from the native release binary.
+#
+# These settings apply to native release builds too. `cargo build --release` is slower
+# than it used to be (single codegen unit + LTO), but produces a smaller and faster
+# artifact. For a security engine this is the right default — the reporting service
+# compiles release once at deploy time and runs it for weeks.
+[profile.release]
+opt-level = "z"
+lto = true
+codegen-units = 1
+panic = "abort"
+strip = true

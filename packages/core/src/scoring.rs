@@ -307,17 +307,21 @@ mod tests {
 
     // --- score_signals: integration with the rule set --------------------------------
 
-    const CANONICAL_RULES: &str = r#"
-- {id: honeypot-field-fill,   description: h, signal: honeypot_triggered,   weight: 80, action: flag}
-- {id: rate-limit-exceeded,   description: r, signal: rate_limit_exceeded,  weight: 40, action: flag}
-- {id: canary-embedded,       description: c, signal: canary_embedded,      weight: 0,  action: flag}
-- {id: behavioral-score-low,  description: b, signal: behavioral_score,     weight: 30, action: flag}
-- {id: attestation-failed,    description: a, signal: attestation_failed,   weight: 60, action: flag}
-- {id: request-fingerprint,   description: f, signal: request_fingerprint,  weight: 50, action: flag}
-"#;
+    // JSON, not YAML, so these tests compile and pass under `--no-default-features`
+    // (the same code path the browser WASM build will exercise in sub-step 2c).
+    // rules.rs proves elsewhere that YAML and JSON produce identical `Rule` structs
+    // (see `yaml_and_json_produce_equal_rules`), so nothing scoring-relevant is lost.
+    const CANONICAL_RULES: &str = r#"[
+        {"id": "honeypot-field-fill",  "description": "h", "signal": "honeypot_triggered",  "weight": 80, "action": "flag"},
+        {"id": "rate-limit-exceeded",  "description": "r", "signal": "rate_limit_exceeded", "weight": 40, "action": "flag"},
+        {"id": "canary-embedded",      "description": "c", "signal": "canary_embedded",     "weight": 0,  "action": "flag"},
+        {"id": "behavioral-score-low", "description": "b", "signal": "behavioral_score",    "weight": 30, "action": "flag"},
+        {"id": "attestation-failed",   "description": "a", "signal": "attestation_failed",  "weight": 60, "action": "flag"},
+        {"id": "request-fingerprint",  "description": "f", "signal": "request_fingerprint", "weight": 50, "action": "flag"}
+    ]"#;
 
     fn canonical() -> RuleSet {
-        RuleSet::from_yaml_str(CANONICAL_RULES).unwrap()
+        RuleSet::from_json_str(CANONICAL_RULES).unwrap()
     }
 
     #[test]
@@ -418,12 +422,12 @@ mod tests {
         // Determinism matters for the dashboard: reordering the input signals must not
         // reorder the output list — it's driven by the *rules* file order, not the
         // event stream order for the same signal.
-        let yaml = r#"
-- {id: first,  description: x, signal: same, weight: 10}
-- {id: second, description: x, signal: same, weight: 10}
-- {id: third,  description: x, signal: same, weight: 10}
-"#;
-        let set = RuleSet::from_yaml_str(yaml).unwrap();
+        let json = r#"[
+            {"id": "first",  "description": "x", "signal": "same", "weight": 10},
+            {"id": "second", "description": "x", "signal": "same", "weight": 10},
+            {"id": "third",  "description": "x", "signal": "same", "weight": 10}
+        ]"#;
+        let set = RuleSet::from_json_str(json).unwrap();
         let r = score_signals(&set, &["same"]);
         assert_eq!(r.triggered_rule_ids, vec!["first", "second", "third"]);
     }
