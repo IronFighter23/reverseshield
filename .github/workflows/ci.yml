@@ -36,6 +36,30 @@ jobs:
         run: cargo build --workspace
       - name: Test
         run: cargo test --workspace
+  wasm:
+    # Builds the reverseshield-core crate to WebAssembly and confirms the artifact lands.
+    # Independent of the `rust` job — parallelism, and either job failing surfaces its own
+    # error without waiting on the other. See packages/core/build-wasm.sh for details.
+    name: WASM — build + size check
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+        with:
+          # Separate cache key from the `rust` job — WASM builds use a different target
+          # dir and different installed CLI (wasm-bindgen-cli), so a shared cache would
+          # just churn.
+          key: wasm
+      - name: Build WASM
+        run: bash packages/core/build-wasm.sh
+      - name: Upload WASM artifact
+        uses: actions/upload-artifact@v5
+        with:
+          name: reverseshield-core-wasm
+          path: packages/core/pkg/
+          if-no-files-found: error
+          retention-days: 7
   php:
     name: PHP — WordPress smoke + Laravel PHPUnit
     runs-on: ubuntu-latest

@@ -20,6 +20,12 @@ pub mod event;
 pub mod rules;
 pub mod scoring;
 
+// wasm-bindgen exports for the browser agent. Only compiled for wasm32 targets, using
+// the same target-arch gate as the wasm-bindgen dep in packages/core/Cargo.toml. Native
+// builds and the PHP FFI binding (Phase 2 step 4) skip this module entirely.
+#[cfg(target_arch = "wasm32")]
+pub mod wasm;
+
 // Re-exports so downstream callers can `use reverseshield_core::RuleSet` without
 // caring which internal module owns which type. Keep this list tight — the point
 // of re-exporting is convenience for the two or three types every consumer needs,

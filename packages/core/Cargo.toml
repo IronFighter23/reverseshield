@@ -34,11 +34,11 @@ thiserror = "1.0"
 
 # wasm-bindgen is only compiled for the wasm32 target. Native `cargo build` / `cargo test`
 # never pull it in — this avoids dragging JS-glue crates into PHP/native FFI consumers,
-# and keeps the native build lean. When Phase 2 step 2b turns on WASM, the
-# wasm32-unknown-unknown target picks this up automatically; then `wasm-bindgen-cli`
-# is run over the resulting .wasm file (replacing the deprecated `wasm-pack` toolchain).
+# and keeps the native build lean. The `=0.2.100` pin is not caret-relaxed: `wasm-bindgen`
+# and `wasm-bindgen-cli` (invoked by build-wasm.sh) must be exact matches or the CLI
+# refuses with a version-mismatch error. Bump both together, never one alone.
 [target.'cfg(target_arch = "wasm32")'.dependencies]
-wasm-bindgen = "0.2"
+wasm-bindgen = "=0.2.100"
 
 [dev-dependencies]
 tempfile = "3"
