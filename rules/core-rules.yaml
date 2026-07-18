@@ -1,0 +1,57 @@
+# ReverseShield core detection rules.
+#
+# This file is the single source of truth for detection weights and actions. The Rust
+# engine (packages/core), the JS agent (packages/agent-js) via the WASM build, and the
+# server middlewares (via FFI/bindings in Phase 2 step 4) all evaluate against this same
+# file. Change weights here; do not inline them anywhere else.
+#
+# Schema — see SPEC.md §3.3.
+#
+#   - id: kebab-case unique identifier for the rule.
+#   - description: human-readable, shown in dashboard tooltips.
+#   - signal:     one of the SPEC §3.1 event types the rule reacts to.
+#   - weight:     non-negative integer, subtracted from a base of 100 to compute score.
+#                 A weight of 100 is enough to drop score to 0 (likely bot) on its own.
+#   - action:     flag (v1) | throttle (v2+) | block (v2+). v1 engine only reports flags;
+#                 throttle/block are read but not enforced until v2.
+#
+# Trust score bands (SPEC §3.4):
+#   70..=100  likely human
+#   40..=69   suspicious
+#    0..=39   likely bot
+
+- id: honeypot-field-fill
+  description: "Bot filled a hidden form field"
+  signal: honeypot_triggered
+  weight: 80
+  action: flag
+
+- id: rate-limit-exceeded
+  description: "Session exceeded request rate threshold"
+  signal: rate_limit_exceeded
+  weight: 40
+  action: flag
+
+- id: canary-embedded
+  description: "Canary token embedded on page — observation signal, not a penalty"
+  signal: canary_embedded
+  weight: 0
+  action: flag
+
+- id: behavioral-score-low
+  description: "Behavioral telemetry (mouse/scroll/timing) below human threshold"
+  signal: behavioral_score
+  weight: 30
+  action: flag
+
+- id: attestation-failed
+  description: "Session failed the lightweight attestation challenge"
+  signal: attestation_failed
+  weight: 60
+  action: flag
+
+- id: request-fingerprint-mismatch
+  description: "TLS/JA3 or header-order fingerprint inconsistent with claimed user agent"
+  signal: request_fingerprint
+  weight: 50
+  action: flag

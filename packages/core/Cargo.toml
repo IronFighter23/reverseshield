@@ -1,12 +1,34 @@
 [package]
 name = "reverseshield-core"
-version = "0.0.0"
+version = "0.1.0"
 edition = "2021"
-description = "ReverseShield core detection engine."
+description = "ReverseShield core detection engine — rule evaluation and trust scoring."
+license = "MIT"
 publish = false
 
 [lib]
 name = "reverseshield_core"
-crate-type = ["rlib"]
+# `cdylib` is required for the eventual wasm32 build and any C-ABI FFI (PHP bindings, Phase 2 step 4).
+# `rlib` is kept so Rust integration tests and downstream Rust consumers can link normally.
+crate-type = ["cdylib", "rlib"]
 
 [dependencies]
+serde = { version = "1.0", features = ["derive"] }
+serde_yaml = "0.9"
+thiserror = "1.0"
+
+# wasm-bindgen is only compiled for the wasm32 target. Native `cargo build` / `cargo test`
+# never pull it in — this avoids dragging JS-glue crates into PHP/native FFI consumers,
+# and keeps the native build under Phase 2 step 1 lean. When Phase 2 step 3 turns on WASM,
+# the wasm32-unknown-unknown target picks this up automatically; then `wasm-bindgen-cli`
+# is run over the resulting .wasm file (replacing the deprecated `wasm-pack` toolchain).
+[target.'cfg(target_arch = "wasm32")'.dependencies]
+wasm-bindgen = "0.2"
+
+[dev-dependencies]
+tempfile = "3"
+
+[package.metadata.reverseshield]
+# Rules file consumed by this crate. Kept in metadata rather than a build.rs constant so
+# host applications (reporting service, middlewares) can override the path per deployment.
+default_rules_path = "../../rules/core-rules.yaml"
