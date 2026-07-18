@@ -261,7 +261,10 @@ mod tests {
                 assert!(
                     with_extra <= without,
                     "adding weight {} to base {} raised score from {} to {}",
-                    extra, base, without, with_extra
+                    extra,
+                    base,
+                    without,
+                    with_extra
                 );
             }
         }

@@ -502,7 +502,10 @@ mod tests {
         if path.exists() {
             let set = RuleSet::load_from_path(path)
                 .expect("shipped rules/core-rules.yaml must parse cleanly");
-            assert!(!set.rules().is_empty(), "shipped rules file should not be empty");
+            assert!(
+                !set.rules().is_empty(),
+                "shipped rules file should not be empty"
+            );
             // Every shipped rule must react to one of the six SPEC §3.1 signals.
             let valid_signals = [
                 "honeypot_triggered",
