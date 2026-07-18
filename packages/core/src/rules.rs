@@ -37,20 +37,14 @@ use thiserror::Error;
 /// middlewares can enforce them without a rules-file migration. See SPEC §3.4 —
 /// "Automatic blocking based on score is a v2 feature gated behind explicit config
 /// (`action: block`) — never on by default."
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
 #[serde(rename_all = "lowercase")]
 pub enum Action {
+    #[default]
     Flag,
     Throttle,
     Block,
 }
-
-impl Default for Action {
-    fn default() -> Self {
-        Action::Flag
-    }
-}
-
 /// One row in `rules/core-rules.yaml`. Shape locked to SPEC §3.3.
 ///
 /// `#[serde(deny_unknown_fields)]` is deliberate: an unknown key almost always means a
