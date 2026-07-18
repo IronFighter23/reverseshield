@@ -1,17 +1,15 @@
 name: CI
-
 on:
   push:
     branches: [main]
   pull_request:
-
 jobs:
   js:
     name: JS — lint & test
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
         with:
           node-version: '20'
           cache: 'npm'
@@ -21,12 +19,11 @@ jobs:
         run: npm run lint --workspaces --if-present
       - name: Test
         run: npm run test --workspaces --if-present
-
   rust:
     name: Rust — fmt, clippy, build, test
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - uses: dtolnay/rust-toolchain@stable
         with:
           components: rustfmt, clippy
@@ -39,12 +36,11 @@ jobs:
         run: cargo build --workspace
       - name: Test
         run: cargo test --workspace
-
   php:
     name: PHP — WordPress smoke + Laravel PHPUnit
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - name: Set up PHP
         uses: shivammathur/setup-php@v2
         with:
@@ -54,7 +50,7 @@ jobs:
       - name: WordPress plugin — CLI smoke test
         run: php packages/middleware-wordpress/test/plugin-test.php
       - name: Cache Composer packages
-        uses: actions/cache@v4
+        uses: actions/cache@v5
         with:
           path: packages/middleware-laravel/vendor
           key: composer-${{ hashFiles('packages/middleware-laravel/composer.json') }}
