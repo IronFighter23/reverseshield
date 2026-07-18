@@ -148,27 +148,12 @@ describe("CORS policy (SPEC guardrail)", () => {
     db.close();
   });
 
-  it("POST /api/v1/events allows any origin (agents install anywhere)", async () => {
-    // Reflects the requesting origin rather than sending "*". Same threat model —
-    // the events response is {ok:true}, nothing sensitive — but reflection is
-    // required because the browser agent's fetch sends credentials:'include' and
-    // browsers reject "*" when credentials are involved.
-    const arbitraryOrigin = "https://random-customer-site.com";
+  it("POST /api/v1/events allows Origin: * (agents install anywhere)", async () => {
     const res = await request(app)
       .options("/api/v1/events")
-      .set("Origin", arbitraryOrigin)
+      .set("Origin", "https://random-customer-site.com")
       .set("Access-Control-Request-Method", "POST");
-    expect(res.headers["access-control-allow-origin"]).toBe(arbitraryOrigin);
-    expect(res.headers["access-control-allow-credentials"]).toBe("true");
-
-    // Prove a completely different origin also gets reflected — this is the
-    // "allows any origin" guarantee, just via reflection instead of wildcard.
-    const otherOrigin = "https://another-customer.example";
-    const res2 = await request(app)
-      .options("/api/v1/events")
-      .set("Origin", otherOrigin)
-      .set("Access-Control-Request-Method", "POST");
-    expect(res2.headers["access-control-allow-origin"]).toBe(otherOrigin);
+    expect(res.headers["access-control-allow-origin"]).toBe("*");
   });
 
   it("GET /api/v1/sites reflects only the dashboard origin", async () => {

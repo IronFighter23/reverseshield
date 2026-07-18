@@ -32,6 +32,10 @@ export function App(): JSX.Element {
   const [showRegister, setShowRegister] = useState(false);
   const [newSiteName, setNewSiteName] = useState("");
   const [lastInstallSnippet, setLastInstallSnippet] = useState<string | null>(null);
+  // refreshTick increments when the user clicks Refresh. Including it in the
+  // effect's dep list forces a re-fetch even when the selected site is unchanged
+  // — clicking an already-selected pill would otherwise be a no-op.
+  const [refreshTick, setRefreshTick] = useState(0);
 
   // Load site list on mount.
   useEffect(() => {
@@ -72,7 +76,7 @@ export function App(): JSX.Element {
     return () => {
       cancelled = true;
     };
-  }, [selectedSiteId]);
+  }, [selectedSiteId, refreshTick]);
 
   async function handleRegister(e: React.FormEvent): Promise<void> {
     e.preventDefault();
@@ -98,13 +102,26 @@ export function App(): JSX.Element {
             Bot & scraper defense · reporting dashboard
           </p>
         </div>
-        <button
-          type="button"
-          onClick={() => setShowRegister((v) => !v)}
-          className="rounded-md border border-slate-700 bg-slate-900 px-4 py-2 text-sm font-medium text-slate-200 hover:bg-slate-800"
-        >
-          {showRegister ? "Cancel" : "+ Register site"}
-        </button>
+        <div className="flex items-center gap-2">
+          {selectedSiteId && (
+            <button
+              type="button"
+              onClick={() => setRefreshTick((n) => n + 1)}
+              disabled={loading}
+              className="rounded-md border border-slate-700 bg-slate-900 px-4 py-2 text-sm font-medium text-slate-200 hover:bg-slate-800 disabled:opacity-50"
+              title="Refetch summary and events for the selected site"
+            >
+              {loading ? "Refreshing…" : "↻ Refresh"}
+            </button>
+          )}
+          <button
+            type="button"
+            onClick={() => setShowRegister((v) => !v)}
+            className="rounded-md border border-slate-700 bg-slate-900 px-4 py-2 text-sm font-medium text-slate-200 hover:bg-slate-800"
+          >
+            {showRegister ? "Cancel" : "+ Register site"}
+          </button>
+        </div>
       </header>
 
       {showRegister && (

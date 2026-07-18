@@ -26,12 +26,6 @@ export function createApp(db: ReverseShieldDb, config: ApiConfig): Express {
 
   // Behind a proxy in production. This makes req.ip return the X-Forwarded-For head IP,
   // which is what we hash for ip_hash.
-  app.use((req, res, next) => {
-    if (req.headers["access-control-request-private-network"]) {
-      res.setHeader("Access-Control-Allow-Private-Network", "true");
-    }
-    next();
-  });
   app.set("trust proxy", true);
 
   // Security headers on every response. helmet defaults are fine for an API.
@@ -43,10 +37,10 @@ export function createApp(db: ReverseShieldDb, config: ApiConfig): Express {
 
   // Per-route CORS configuration ---------------------------------------------------------
   const openOrigin: CorsOptions = {
-    origin: (origin, cb) => cb(null, origin ?? true),
+    origin: "*",
     methods: ["POST", "OPTIONS"],
     allowedHeaders: ["Content-Type"],
-    credentials: true,
+    credentials: false,
     maxAge: 86400,
   };
 
