@@ -5,6 +5,12 @@ on:
   pull_request:
 jobs:
   js:
+    # Builds and tests the browser agent and reporting service. The agent-js package
+    # depends on the compiled WASM binary (real, not the stub) for its integration
+    # tests and for its final bundle. Rather than serialize this job behind the `wasm`
+    # job via `needs`, we build WASM inline here. Yes, that's duplicated work versus
+    # the `wasm` job below — but Swatinem's cargo cache absorbs the compile cost
+    # within seconds, and independent jobs surface their own failures faster.
     name: JS — lint & test
     runs-on: ubuntu-latest
     steps:
@@ -13,12 +19,35 @@ jobs:
         with:
           node-version: '20'
           cache: 'npm'
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+        with:
+          # Separate cache key from the `wasm` job — same crate, different target dir
+          # in practice (this job also runs native cargo through JS deps that pull
+          # rust things transitively for tooling like esbuild's native binary).
+          key: js
+      - name: Build WASM (real binary needed by scoring.wasm.test.ts and the final bundle)
+        run: bash packages/core/build-wasm.sh
       - name: Install
         run: npm install
       - name: Lint
         run: npm run lint --workspaces --if-present
       - name: Test
         run: npm run test --workspaces --if-present
+      - name: Build agent-js
+        run: npm run build --workspace=packages/agent-js
+      - name: Bundle size check (dist/index.js gzipped <= 12 KB)
+        run: |
+          set -euo pipefail
+          BUDGET=12288
+          FILE=packages/agent-js/dist/index.js
+          GZ=$(gzip -9 -c "$FILE" | wc -c | tr -d ' ')
+          RAW=$(stat -c%s "$FILE")
+          echo "::notice file=$FILE::agent-js bundle: raw=$RAW B, gzipped=$GZ B (budget=$BUDGET B gzipped)"
+          if [ "$GZ" -gt "$BUDGET" ]; then
+            echo "::error file=$FILE::gzipped $GZ B exceeds bundle budget of $BUDGET B"
+            exit 1
+          fi
   rust:
     name: Rust — fmt, clippy, build, test
     runs-on: ubuntu-latest
@@ -37,9 +66,10 @@ jobs:
       - name: Test
         run: cargo test --workspace
   wasm:
-    # Builds the reverseshield-core crate to WebAssembly and confirms the artifact lands.
-    # Independent of the `rust` job — parallelism, and either job failing surfaces its own
-    # error without waiting on the other. See packages/core/build-wasm.sh for details.
+    # Builds the reverseshield-core crate to WebAssembly and publishes the artifact.
+    # Runs in parallel with the `js` job — both duplicate the WASM compile, but Swatinem
+    # caching keeps that near-free on the second build. The published artifact here is
+    # what external consumers (the reporting service, CDN uploads) download.
     name: WASM — build + size check
     runs-on: ubuntu-latest
     steps:
@@ -47,14 +77,11 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
         with:
-          # Separate cache key from the `rust` job — WASM builds use a different target
-          # dir and different installed CLI (wasm-bindgen-cli), so a shared cache would
-          # just churn.
           key: wasm
       - name: Build WASM
         run: bash packages/core/build-wasm.sh
       - name: Upload WASM artifact
-        uses: actions/upload-artifact@v5
+        uses: actions/upload-artifact@v7
         with:
           name: reverseshield-core-wasm
           path: packages/core/pkg/

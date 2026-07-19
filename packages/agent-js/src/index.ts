@@ -18,6 +18,7 @@ import { installHoneypots } from "./honeypot.js";
 import { generateCanaryToken, embedCanaryToken } from "./canary.js";
 import { startTelemetry } from "./telemetry.js";
 import { createTransport, uuidv4 } from "./transport.js";
+import { initScoring } from "./scoring.js";
 
 let initialized = false;
 
@@ -67,6 +68,15 @@ export function init(config: Config): void {
         setTimeout(flushTelemetry, resolved.behavioralSnapshotDelayMs);
         // pagehide is more reliable than beforeunload on mobile Safari
         window.addEventListener("pagehide", flushTelemetry, { once: true });
+
+        // 4. Local WASM scoring (fire-and-forget, silent-fail). We do NOT await this
+        // — the agent's event pipeline must never wait for a network fetch. The
+        // resulting Scorer, if it materializes, is stored on scoring.ts module
+        // state and retrievable by any later caller via `initScoring(resolved)`.
+        if (resolved.localScoring) {
+          // `void` marks the promise as deliberately unhandled — silent-fail.
+          void initScoring(resolved);
+        }
       } catch (err) {
         if (resolved.debug) {
           // eslint-disable-next-line no-console
@@ -99,5 +109,7 @@ export function __resetForTests(): void {
 export type { Config, ResolvedConfig } from "./config.js";
 export type { EventType, EventPayload } from "./transport.js";
 export type { BehavioralSnapshot } from "./telemetry.js";
+export type { Scorer, ScoreResult } from "./scoring.js";
+export { initScoring, __resetScoringForTests } from "./scoring.js";
 
 export default { init };

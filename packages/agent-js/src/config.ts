@@ -32,6 +32,31 @@ export interface Config {
   debug?: boolean;
   /** Milliseconds after DOM ready to send the first behavioral snapshot. Default: 10000. */
   behavioralSnapshotDelayMs?: number;
+  /**
+   * If false, the agent skips loading the WASM scoring engine and never scores locally.
+   * Events still ship to the reporting service, which does its own server-side scoring.
+   * Default: true.
+   */
+  localScoring?: boolean;
+  /**
+   * URL the browser fetches the rule set from. Defaults to
+   * `${endpoint}/api/v1/sites/${siteId}/rules.json` — the endpoint the reporting service
+   * will expose in a follow-up milestone. Override only when hosting rules on a
+   * separate CDN.
+   */
+  rulesUrl?: string;
+  /**
+   * URL the browser fetches the compiled WASM binary from. Defaults to
+   * `${endpoint}/agent/reverseshield_core_bg.wasm`. The reporting service (or a static
+   * CDN in front of it) is expected to serve the same `.wasm` produced by
+   * `packages/core/build-wasm.sh`.
+   */
+  wasmUrl?: string;
+  /**
+   * Timeout in milliseconds for the rules fetch. On timeout the agent silently
+   * disables local scoring for the rest of the page load. Default: 5000.
+   */
+  rulesTimeoutMs?: number;
 }
 
 /** Fully-resolved config used internally. All fields required. */
@@ -42,6 +67,10 @@ export interface ResolvedConfig {
   honeypotCount: number;
   debug: boolean;
   behavioralSnapshotDelayMs: number;
+  localScoring: boolean;
+  rulesUrl: string;
+  wasmUrl: string;
+  rulesTimeoutMs: number;
 }
 
 /**
@@ -71,12 +100,23 @@ export function resolveConfig(input: Config): ResolvedConfig {
     throw new Error("ReverseShield: config.behavioralSnapshotDelayMs must be a non-negative number");
   }
 
+  const rulesTimeoutMs = input.rulesTimeoutMs ?? 5_000;
+  if (!Number.isFinite(rulesTimeoutMs) || rulesTimeoutMs < 0) {
+    throw new Error("ReverseShield: config.rulesTimeoutMs must be a non-negative number");
+  }
+
+  const endpoint = input.endpoint.replace(/\/+$/, "");
+
   return {
     siteId: input.siteId,
-    endpoint: input.endpoint.replace(/\/+$/, ""),
+    endpoint,
     seed: input.seed ?? `rs-seed-${input.siteId}`,
     honeypotCount,
     debug: input.debug ?? false,
     behavioralSnapshotDelayMs,
+    localScoring: input.localScoring ?? true,
+    rulesUrl: input.rulesUrl ?? `${endpoint}/api/v1/sites/${input.siteId}/rules.json`,
+    wasmUrl: input.wasmUrl ?? `${endpoint}/agent/reverseshield_core_bg.wasm`,
+    rulesTimeoutMs,
   };
 }

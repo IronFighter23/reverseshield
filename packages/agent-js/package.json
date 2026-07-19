@@ -19,9 +19,14 @@
     "src"
   ],
   "scripts": {
+    "wasm": "node scripts/prepare-wasm.mjs",
+    "wasm:build": "bash ../core/build-wasm.sh && node scripts/prepare-wasm.mjs",
+    "prebuild": "npm run wasm",
     "build": "node esbuild.config.mjs && tsc --emitDeclarationOnly --declaration --outDir dist",
+    "pretest": "npm run wasm",
     "test": "vitest run",
     "test:watch": "vitest",
+    "prelint": "npm run wasm",
     "lint": "tsc --noEmit"
   },
   "devDependencies": {

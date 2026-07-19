@@ -81,14 +81,17 @@ echo "==> Build complete"
 echo "    Raw WASM:  $RAW_SIZE bytes"
 echo "    Gzipped:   $GZIP_SIZE bytes (what the browser actually downloads)"
 
-# Soft budget: warn if over, but do not fail. This is intentional for sub-step 2b —
-# we are establishing an unoptimized baseline. Sub-step 2c will lock in a hard failure
-# threshold once we know what "reasonable" looks like in practice.
-SOFT_BUDGET_GZIP=80000
-if [ "$GZIP_SIZE" -gt "$SOFT_BUDGET_GZIP" ]; then
-    # GitHub Actions picks up ::warning:: annotations and surfaces them on the run page.
-    # In local runs it's just an extra echo line — harmless either way.
-    echo "::warning file=$WASM_OUTPUT::gzipped WASM size $GZIP_SIZE B exceeds soft budget of $SOFT_BUDGET_GZIP B"
+# Hard budget: fail the build if gzipped WASM exceeds 60 KB. Sub-step 2c set this
+# ceiling based on the ~44 KB baseline measured in sub-step 2b, leaving ~15 KB of
+# headroom for legitimate growth (attestation exports in step 5). If a future change
+# blows the ceiling, that's not a "warn and merge" situation — it's a design signal
+# that something has been pulled in that shouldn't be there.
+HARD_BUDGET_GZIP=61440
+if [ "$GZIP_SIZE" -gt "$HARD_BUDGET_GZIP" ]; then
+    # ::error file=…:: renders as an inline annotation on the GitHub Actions run page,
+    # pointing right at the artifact. Locally it's just a bold-ish log line.
+    echo "::error file=$WASM_OUTPUT::gzipped WASM size $GZIP_SIZE B exceeds hard budget of $HARD_BUDGET_GZIP B" >&2
+    exit 1
 fi
 
 echo ""
