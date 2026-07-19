@@ -35,6 +35,19 @@ export interface ApiConfig {
    * Used to serve GET /agent.js. Default resolves via the monorepo layout.
    */
   agentBundlePath: string;
+  /**
+   * Absolute path to the compiled WASM binary produced by `bash packages/core/build-wasm.sh`.
+   * Used to serve GET /agent/reverseshield_core_bg.wasm. Default resolves via the monorepo
+   * layout. In production this is typically overridden to a CDN — see .env.example.
+   */
+  wasmBundlePath: string;
+  /**
+   * Absolute path to the rules file — `rules/core-rules.yaml` — the single source of
+   * truth consumed by the Rust engine, the reporting API, and (via the API) the browser
+   * agents. The API reads it fresh on every rules request to preserve hot-reload
+   * semantics; no in-memory cache means editing the file takes effect immediately.
+   */
+  rulesFilePath: string;
   /** Node env — 'test' disables noisy startup logging in vitest runs. */
   nodeEnv: "development" | "production" | "test";
 }
@@ -48,6 +61,16 @@ function defaultAgentBundlePath(): string {
   const here = dirname(fileURLToPath(import.meta.url));
   // src → api → reporting → services → <repo root>
   return resolve(here, "../../../..", "packages/agent-js/dist/index.js");
+}
+
+function defaultWasmBundlePath(): string {
+  const here = dirname(fileURLToPath(import.meta.url));
+  return resolve(here, "../../../..", "packages/core/pkg/reverseshield_core_bg.wasm");
+}
+
+function defaultRulesFilePath(): string {
+  const here = dirname(fileURLToPath(import.meta.url));
+  return resolve(here, "../../../..", "rules/core-rules.yaml");
 }
 
 function defaultDatabasePath(): string {
@@ -74,6 +97,8 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): ApiConfig {
     publicUrl: env.RS_PUBLIC_URL ?? `http://localhost:${port}`,
     ipHashPepper: env.RS_IP_HASH_PEPPER ?? "",
     agentBundlePath: env.RS_AGENT_BUNDLE_PATH ?? defaultAgentBundlePath(),
+    wasmBundlePath: env.RS_WASM_BUNDLE_PATH ?? defaultWasmBundlePath(),
+    rulesFilePath: env.RS_RULES_FILE_PATH ?? defaultRulesFilePath(),
     nodeEnv,
   };
 }

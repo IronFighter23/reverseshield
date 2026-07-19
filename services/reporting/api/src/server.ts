@@ -8,6 +8,7 @@ import type { ReverseShieldDb } from "./db/index.js";
 import { eventsRouter, siteEventsRouter } from "./routes/events.js";
 import { sitesRouter } from "./routes/sites.js";
 import { recommendationsRouter } from "./routes/recommendations.js";
+import { rulesHandler } from "./routes/rules.js";
 
 /**
  * Build the Express app. Exposed as a factory so tests can construct instances against
@@ -84,10 +85,37 @@ export function createApp(db: ReverseShieldDb, config: ApiConfig): Express {
     res.sendFile(path);
   });
 
+  // GET /agent/reverseshield_core_bg.wasm — serve the WASM binary. Same CORS + cache
+  // policy as /agent.js. In production this endpoint is typically fronted by a CDN
+  // (see .env.example: RS_WASM_BUNDLE_PATH), but the fallback keeps the "one URL, zero
+  // config" install story working for self-hosters.
+  app.get("/agent/reverseshield_core_bg.wasm", cors(openReadOrigin), (_req, res) => {
+    const path = config.wasmBundlePath;
+    if (!existsSync(path)) {
+      return res.status(503).json({
+        error: "wasm_bundle_missing",
+        message:
+          "Build the WASM first: bash packages/core/build-wasm.sh",
+        expected_path: path,
+      });
+    }
+    res.type("application/wasm");
+    res.set("Cache-Control", "public, max-age=300");
+    res.sendFile(path);
+  });
+
   // Events ingestion — must accept from any origin (browser agents live everywhere).
   const eventsPath = "/api/v1/events";
   app.options(eventsPath, cors(openOrigin));
   app.use(eventsPath, cors(openOrigin), eventsRouter(db, config));
+
+  // Rules distribution — same asymmetry as events. Browser agents on arbitrary origins
+  // fetch this once per page load. Registered BEFORE the blanket `/api/v1` middleware
+  // below so its permissive CORS wins the match. Only exposes the current rule set,
+  // so no leak surface even under Origin:*.
+  const rulesPath = "/api/v1/sites/:site_id/rules.json";
+  app.options(rulesPath, cors(openReadOrigin));
+  app.get(rulesPath, cors(openReadOrigin), rulesHandler(db, config));
 
   // Everything else on /api/v1 — locked to the dashboard origin.
   app.use("/api/v1", cors(dashboardOnly));

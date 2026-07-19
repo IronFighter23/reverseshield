@@ -55,3 +55,27 @@ export const registerSiteSchema = z
   .strict();
 
 export type RegisterSiteInput = z.infer<typeof registerSiteSchema>;
+
+/**
+ * Single detection rule loaded from `rules/core-rules.yaml`. Shape mirrors the Rust
+ * `Rule` struct in packages/core/src/rules.rs one-for-one — same field names, same
+ * types, same defaults — so what this service emits over the wire deserializes
+ * cleanly on the WASM side without any adapter layer.
+ *
+ * Unknown fields are silently dropped (not `.strict()`). Rationale: the Rust engine
+ * uses `deny_unknown_fields` at its own YAML parse boundary, so structural mistakes
+ * are already caught by whichever engine is closer to the maintainer. This service
+ * is a wire-format transformer between the two, not a duplicate gatekeeper.
+ */
+export const ruleSchema = z.object({
+  id: z.string().min(1),
+  description: z.string(),
+  signal: z.string().min(1),
+  weight: z.number().int().nonnegative(),
+  action: z.enum(["flag", "throttle", "block"]).default("flag"),
+});
+
+export type ValidatedRule = z.infer<typeof ruleSchema>;
+
+/** The rules file is a top-level array of rules. */
+export const ruleSetSchema = z.array(ruleSchema);
