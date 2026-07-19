@@ -29,6 +29,14 @@ return [
     // Hard timeout on outbound events POST. Fail-open kicks in past this.
     'timeout_ms' => (int) env('REVERSESHIELD_TIMEOUT_MS', 200),
 
+    // Hard timeout on the scoring API call (POST /api/v1/score). Falls back to
+    // timeout_ms if unset. Kept separate so operators can tune scoring tighter
+    // than event reporting — a slow score just means "no local score enrichment
+    // for this request", but a slow event report is a real observability gap.
+    'scoring_timeout_ms' => env('REVERSESHIELD_SCORING_TIMEOUT_MS') !== null
+        ? (int) env('REVERSESHIELD_SCORING_TIMEOUT_MS')
+        : (int) env('REVERSESHIELD_TIMEOUT_MS', 200),
+
     // If true, the service provider calls $kernel->pushMiddleware() on boot so
     // this middleware runs on every HTTP request. Set false to opt out and add
     // it to your own middleware groups selectively.

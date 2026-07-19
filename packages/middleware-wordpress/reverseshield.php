@@ -92,6 +92,9 @@ final class ReverseShield_Plugin {
     /** @var float seconds */
     private $timeout_seconds;
 
+    /** @var float seconds — separate budget for scoring calls (blocking); defaults to timeout_seconds. */
+    private $scoring_timeout_seconds;
+
     /** @var bool */
     private $enabled;
 
@@ -101,6 +104,13 @@ final class ReverseShield_Plugin {
             $this->site_id = (string) REVERSESHIELD_SITE_ID;
             $this->endpoint = rtrim((string) REVERSESHIELD_ENDPOINT, '/');
             $this->timeout_seconds = max(0.05, ((int) REVERSESHIELD_TIMEOUT_MS) / 1000.0);
+            // Optional per-scoring budget. Falls back to the general timeout when the
+            // constant isn't defined — operators only need the extra knob when they
+            // want scoring tighter than event reporting.
+            $scoring_ms = defined('REVERSESHIELD_SCORING_TIMEOUT_MS')
+                ? (int) REVERSESHIELD_SCORING_TIMEOUT_MS
+                : (int) REVERSESHIELD_TIMEOUT_MS;
+            $this->scoring_timeout_seconds = max(0.05, $scoring_ms / 1000.0);
 
             if (!$this->enabled) {
                 return;
@@ -434,6 +444,17 @@ final class ReverseShield_Plugin {
      */
     private function send_event($type, $score_delta, $details) {
         try {
+            // Enrich with the API-computed score if scoring is available. Never
+            // blocks the event send: if the scoring call fails, times out, or the
+            // API is unreachable, we ship the event without `score` / `band` in
+            // details — exactly the Phase 1 event shape. This means enabling or
+            // disabling scoring is transparent to any downstream events consumer.
+            $score = $this->fetch_score(array($type));
+            if ($score !== null && is_array($details)) {
+                $details['score'] = $score['score'];
+                $details['band']  = $score['band'];
+            }
+
             $payload = array(
                 'event_id' => wp_generate_uuid4(),
                 'site_id' => $this->site_id,
@@ -471,6 +492,88 @@ final class ReverseShield_Plugin {
             );
         } catch (Throwable $e) {
             // fail-open — the entire purpose of the outer try/catch
+        }
+    }
+
+    /**
+     * Call POST /api/v1/score to get the canonical trust score for a set of
+     * signals. Returns an associative array on success, null on any failure —
+     * matches the Laravel ScoringClient contract one-for-one.
+     *
+     * Fail-open modes (all return null, all silent):
+     *   * site_id or endpoint unset       — no HTTP call issued
+     *   * wp_remote_post is a WP_Error    — network / DNS failure
+     *   * non-2xx response                — server-side error
+     *   * body isn't JSON                 — misconfigured proxy
+     *   * body is missing expected fields — corrupted response
+     *
+     * @param string[] $signals
+     * @return array{score:int,band:string,triggered_rule_ids:array,total_weight:int}|null
+     */
+    private function fetch_score($signals) {
+        try {
+            if ($this->site_id === '' || $this->endpoint === '') {
+                return null;
+            }
+
+            $body = wp_json_encode(array(
+                'site_id' => $this->site_id,
+                'signals' => array_values($signals),
+            ));
+            if ($body === false || $body === null) {
+                return null;
+            }
+
+            $response = wp_remote_post(
+                $this->endpoint . '/api/v1/score',
+                array(
+                    'timeout' => $this->scoring_timeout_seconds,
+                    'blocking' => true, // scoring must return a body for enrichment to work
+                    'headers' => array(
+                        'Content-Type' => 'application/json',
+                        'Accept' => 'application/json',
+                    ),
+                    'body' => $body,
+                    'sslverify' => false,
+                    'user-agent' => 'ReverseShield-WP/0.1',
+                )
+            );
+
+            if (is_wp_error($response)) {
+                return null;
+            }
+            $status = (int) wp_remote_retrieve_response_code($response);
+            if ($status < 200 || $status >= 300) {
+                return null;
+            }
+            $raw = (string) wp_remote_retrieve_body($response);
+            if ($raw === '') {
+                return null;
+            }
+            $parsed = json_decode($raw, true);
+
+            // Defensive shape check — a misconfigured reverse proxy might return
+            // HTML "200 OK" pages under failure conditions. We do not blindly
+            // trust "2xx" without validating the body has our expected fields.
+            if (
+                !is_array($parsed)
+                || !isset($parsed['score'], $parsed['band'], $parsed['triggered_rule_ids'], $parsed['total_weight'])
+                || !is_int($parsed['score'])
+                || !is_string($parsed['band'])
+                || !is_array($parsed['triggered_rule_ids'])
+                || !is_int($parsed['total_weight'])
+            ) {
+                return null;
+            }
+
+            return array(
+                'score' => $parsed['score'],
+                'band'  => $parsed['band'],
+                'triggered_rule_ids' => array_values(array_filter($parsed['triggered_rule_ids'], 'is_string')),
+                'total_weight' => $parsed['total_weight'],
+            );
+        } catch (Throwable $e) {
+            return null;
         }
     }
 

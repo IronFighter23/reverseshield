@@ -42,6 +42,12 @@ export interface ApiConfig {
    */
   wasmBundlePath: string;
   /**
+   * Absolute path to the wasm-bindgen JS glue file (paired with wasmBundlePath). Loaded
+   * dynamically by src/scoring/engine.ts to power POST /api/v1/score. Default resolves
+   * via the monorepo layout.
+   */
+  wasmGlueJsPath: string;
+  /**
    * Absolute path to the rules file — `rules/core-rules.yaml` — the single source of
    * truth consumed by the Rust engine, the reporting API, and (via the API) the browser
    * agents. The API reads it fresh on every rules request to preserve hot-reload
@@ -66,6 +72,11 @@ function defaultAgentBundlePath(): string {
 function defaultWasmBundlePath(): string {
   const here = dirname(fileURLToPath(import.meta.url));
   return resolve(here, "../../../..", "packages/core/pkg/reverseshield_core_bg.wasm");
+}
+
+function defaultWasmGlueJsPath(): string {
+  const here = dirname(fileURLToPath(import.meta.url));
+  return resolve(here, "../../../..", "packages/core/pkg/reverseshield_core.js");
 }
 
 function defaultRulesFilePath(): string {
@@ -98,6 +109,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): ApiConfig {
     ipHashPepper: env.RS_IP_HASH_PEPPER ?? "",
     agentBundlePath: env.RS_AGENT_BUNDLE_PATH ?? defaultAgentBundlePath(),
     wasmBundlePath: env.RS_WASM_BUNDLE_PATH ?? defaultWasmBundlePath(),
+    wasmGlueJsPath: env.RS_WASM_GLUE_JS_PATH ?? defaultWasmGlueJsPath(),
     rulesFilePath: env.RS_RULES_FILE_PATH ?? defaultRulesFilePath(),
     nodeEnv,
   };

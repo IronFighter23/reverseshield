@@ -9,6 +9,7 @@ import { eventsRouter, siteEventsRouter } from "./routes/events.js";
 import { sitesRouter } from "./routes/sites.js";
 import { recommendationsRouter } from "./routes/recommendations.js";
 import { rulesHandler } from "./routes/rules.js";
+import { scoreHandler } from "./routes/score.js";
 
 /**
  * Build the Express app. Exposed as a factory so tests can construct instances against
@@ -108,6 +109,13 @@ export function createApp(db: ReverseShieldDb, config: ApiConfig): Express {
   const eventsPath = "/api/v1/events";
   app.options(eventsPath, cors(openOrigin));
   app.use(eventsPath, cors(openOrigin), eventsRouter(db, config));
+
+  // Score computation — called by server-side PHP middlewares, and available as a
+  // browser-agent fallback if local WASM fails to load. Permissive CORS matches
+  // events for the same reason: the caller can be anywhere.
+  const scorePath = "/api/v1/score";
+  app.options(scorePath, cors(openOrigin));
+  app.post(scorePath, cors(openOrigin), scoreHandler(db, config));
 
   // Rules distribution — same asymmetry as events. Browser agents on arbitrary origins
   // fetch this once per page load. Registered BEFORE the blanket `/api/v1` middleware

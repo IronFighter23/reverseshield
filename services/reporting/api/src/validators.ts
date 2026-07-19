@@ -79,3 +79,21 @@ export type ValidatedRule = z.infer<typeof ruleSchema>;
 
 /** The rules file is a top-level array of rules. */
 export const ruleSetSchema = z.array(ruleSchema);
+
+/**
+ * POST /api/v1/score request body. Uses the SPEC §3.1 event `type` names for signals so
+ * the middleware doesn't need a separate vocabulary — it forwards whatever event types
+ * it would have logged.
+ *
+ * `.strict()` — extra fields are a red flag on a scoring request. If a middleware sends
+ * something we don't know how to interpret, better to fail loud (400) than silently
+ * ignore and score without a signal the caller thought was material.
+ */
+export const scoreRequestSchema = z
+  .object({
+    site_id: z.string().uuid(),
+    signals: z.array(z.string().min(1)).min(0).max(100),
+  })
+  .strict();
+
+export type ScoreRequestInput = z.infer<typeof scoreRequestSchema>;

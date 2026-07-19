@@ -8,6 +8,7 @@ use Closure;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\RateLimiter;
 use ReverseShield\Laravel\Services\EventReporter;
+use ReverseShield\Laravel\Services\ScoringClient;
 use ReverseShield\Laravel\Support\HoneypotFieldName;
 use Symfony\Component\HttpFoundation\Response;
 use Throwable;
@@ -30,6 +31,7 @@ final class ReverseShieldMiddleware
 {
     public function __construct(
         private readonly EventReporter $reporter,
+        private readonly ScoringClient $scorer,
     ) {}
 
     public function handle(Request $request, Closure $next): Response
@@ -93,7 +95,7 @@ final class ReverseShieldMiddleware
         $key = 'rs_login_' . sha1($ip);
 
         if (RateLimiter::tooManyAttempts($key, $cfg['max'])) {
-            $this->reporter->send('rate_limit_exceeded', -60, [
+            $this->sendWithScore('rate_limit_exceeded', -60, [
                 'rule' => 'login_attempts',
                 'window_seconds' => $cfg['window_seconds'],
                 'max' => $cfg['max'],
@@ -132,7 +134,7 @@ final class ReverseShieldMiddleware
             return null;
         }
 
-        $this->reporter->send('honeypot_triggered', -80, [
+        $this->sendWithScore('honeypot_triggered', -80, [
             'field' => $fieldName,
             'context' => 'form_submit',
             'path' => $request->path(),
@@ -172,7 +174,7 @@ final class ReverseShieldMiddleware
         $attempts = RateLimiter::attempts($key);
 
         if ($attempts > $cfg['max']) {
-            $this->reporter->send('rate_limit_exceeded', -40, [
+            $this->sendWithScore('rate_limit_exceeded', -40, [
                 'rule' => 'api',
                 'window_seconds' => $cfg['window_seconds'],
                 'max' => $cfg['max'],
@@ -303,5 +305,35 @@ final class ReverseShieldMiddleware
         } catch (Throwable) {
             // absolute last resort
         }
+    }
+
+    /**
+     * Compute the trust score for a signal via the scoring API, then dispatch
+     * the event with the score merged into `details`. Fail-open on scoring:
+     * a null result from the ScoringClient just means the event ships without
+     * `score` / `band` fields, exactly the Phase 1 behavior. That way switching
+     * to per-request scoring is strictly additive — no existing event consumer
+     * breaks if the scoring API is down or unreachable.
+     *
+     * The `score_delta` parameter stays as the caller's best-effort estimate.
+     * v1 dashboard code still reads it; v2 can shift entirely to `score` /
+     * `band` once every event source has been migrated through this helper.
+     *
+     * @param string $type SPEC §3.1 event type.
+     * @param int $scoreDelta Legacy weight estimate; preserved unchanged.
+     * @param array<string, mixed> $details Event-specific fields.
+     */
+    private function sendWithScore(string $type, int $scoreDelta, array $details): void
+    {
+        // Timing budget: the ScoringClient has its own 200ms hard cap, so this
+        // call cannot delay the request past what config allows. If the API is
+        // unreachable, ScoringClient returns null and we ship the event without
+        // score enrichment — identical outcome to Phase 1.
+        $score = $this->scorer->score([$type]);
+        if ($score !== null) {
+            $details['score'] = $score['score'];
+            $details['band'] = $score['band'];
+        }
+        $this->reporter->send($type, $scoreDelta, $details);
     }
 }

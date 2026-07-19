@@ -12,6 +12,7 @@ use Illuminate\Support\ServiceProvider;
 use ReverseShield\Laravel\Http\Controllers\DecoyController;
 use ReverseShield\Laravel\Http\Middleware\ReverseShieldMiddleware;
 use ReverseShield\Laravel\Services\EventReporter;
+use ReverseShield\Laravel\Services\ScoringClient;
 use ReverseShield\Laravel\Support\HoneypotFieldName;
 use Throwable;
 
@@ -43,6 +44,24 @@ final class ReverseShieldServiceProvider extends ServiceProvider
                 endpoint: (string) $config->get('reverseshield.endpoint', ''),
                 siteId: (string) $config->get('reverseshield.site_id', ''),
                 timeoutMs: (int) $config->get('reverseshield.timeout_ms', 200),
+            );
+        });
+
+        $this->app->singleton(ScoringClient::class, function ($app) {
+            /** @var \Illuminate\Contracts\Config\Repository $config */
+            $config = $app['config'];
+
+            // Scoring shares the events endpoint by default but uses its own timeout
+            // so the two can be tuned independently. In practice both live at 200ms
+            // — the point of the separate config key is to let operators reduce
+            // scoring to, say, 100ms without also making event reporting flakier.
+            return new ScoringClient(
+                endpoint: (string) $config->get('reverseshield.endpoint', ''),
+                siteId: (string) $config->get('reverseshield.site_id', ''),
+                timeoutMs: (int) $config->get(
+                    'reverseshield.scoring_timeout_ms',
+                    (int) $config->get('reverseshield.timeout_ms', 200),
+                ),
             );
         });
     }

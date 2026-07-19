@@ -94,6 +94,7 @@ function wp_json_encode($data) {
 }
 function wp_remote_post($url, $args) {
     global $captured_events, $remote_post_should_throw, $remote_post_should_return_error;
+    global $mock_score_response, $mock_score_status;
     if ($remote_post_should_throw) {
         throw new RuntimeException('simulated wp_remote_post failure');
     }
@@ -101,7 +102,39 @@ function wp_remote_post($url, $args) {
         return new WP_Error('http_request_failed', 'Simulated failure');
     }
     $captured_events[] = array('url' => $url, 'args' => $args);
+
+    // Score endpoint: return whatever the current test configured. Default = 503
+    // (scoring unavailable), which makes fetch_score return null and every existing
+    // event test behave exactly like before we added enrichment.
+    if (strpos((string) $url, '/api/v1/score') !== false) {
+        $status = isset($mock_score_status) ? (int) $mock_score_status : 503;
+        $body = isset($mock_score_response) ? (string) $mock_score_response : '';
+        return array(
+            'response' => array('code' => $status, 'message' => 'x'),
+            'body' => $body,
+            'headers' => array(),
+        );
+    }
+
+    // Everything else (events): accept with 202, matching the real reporting API.
     return array('response' => array('code' => 202, 'message' => 'Accepted'));
+}
+// Helpers the fetch_score path uses. Real WP defines these; our harness mirrors just
+// enough of their surface to exercise the code without pulling in the WordPress core.
+function wp_remote_retrieve_response_code($response) {
+    if (is_array($response) && isset($response['response']['code'])) {
+        return (int) $response['response']['code'];
+    }
+    return 0;
+}
+function wp_remote_retrieve_body($response) {
+    if (is_array($response) && isset($response['body'])) {
+        return (string) $response['body'];
+    }
+    return '';
+}
+function is_wp_error($thing) {
+    return $thing instanceof WP_Error;
 }
 function is_admin() { return false; }
 function is_feed() { return false; }
@@ -213,9 +246,21 @@ $sendMethod->setAccessible(true);
 
 $captured_events = array();
 $sendMethod->invoke($plugin, 'honeypot_triggered', -80, array('field' => 'email_alt_xxx'));
-assertEq(count($captured_events), 1, 'send_event triggered wp_remote_post exactly once');
 
-$sent = $captured_events[0];
+// send_event now makes TWO wp_remote_post calls: one to /api/v1/score (blocking,
+// for enrichment), then one to /api/v1/events (non-blocking, the actual event).
+// The score call returns 503 by default in the test harness so fetch_score bails
+// to null — meaning the event payload matches Phase 1 shape exactly.
+$event_calls = array_values(array_filter($captured_events, function ($c) {
+    return strpos($c['url'], '/api/v1/events') !== false;
+}));
+$score_calls = array_values(array_filter($captured_events, function ($c) {
+    return strpos($c['url'], '/api/v1/score') !== false;
+}));
+assertEq(count($event_calls), 1, 'send_event fires exactly one events request');
+assertEq(count($score_calls), 1, 'send_event first calls the scoring endpoint');
+
+$sent = $event_calls[0];
 assertEq($sent['url'], 'http://api.test/api/v1/events', 'event URL points at /api/v1/events');
 assertEq((float) $sent['args']['timeout'], 0.2, 'timeout capped at 200ms');
 assertEq($sent['args']['blocking'], false, 'send is non-blocking (fire-and-forget)');
@@ -230,6 +275,17 @@ assertEq($body['ip_hash'], null, 'ip_hash is null; server API computes it');
 assertEq($body['asn'], null, 'asn is null');
 assertTrue(is_array($body['details']), 'details is an object');
 assertEq($body['details']['field'], 'email_alt_xxx', 'details propagates');
+assertTrue(!isset($body['details']['score']), 'no score enrichment when scoring API returns 503 (fail-open)');
+assertTrue(!isset($body['details']['band']), 'no band enrichment when scoring API returns 503 (fail-open)');
+
+// Verify the score request itself is well-formed.
+$score_call = $score_calls[0];
+assertEq($score_call['url'], 'http://api.test/api/v1/score', 'score URL is /api/v1/score');
+assertEq($score_call['args']['blocking'], true, 'score call is blocking (we need the response)');
+$score_body = json_decode($score_call['args']['body'], true);
+assertTrue(is_array($score_body), 'score body is valid JSON');
+assertEq($score_body['site_id'], '5c4c0a5d-091d-4e5b-9f23-f1dada9d5ffd', 'score request carries site_id');
+assertEq($score_body['signals'], array('honeypot_triggered'), 'score request carries the signal');
 
 $uuid_re = '/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i';
 assertTrue((bool) preg_match($uuid_re, $body['event_id']), 'event_id is UUID v4');
@@ -237,6 +293,57 @@ assertTrue((bool) preg_match($uuid_re, $body['session_id']), 'session_id is UUID
 
 $iso_re = '/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z$/';
 assertTrue((bool) preg_match($iso_re, $body['timestamp']), 'timestamp is ISO-8601 UTC (SPEC §3.1)');
+
+// ---- Scoring enrichment: when the API returns a real score --------------
+//
+// This exercises the Phase 2 step 4 payoff on the WordPress side: send_event
+// merges the API-computed `score` and `band` into the event's details before
+// firing. Achieved by staging a 200 response body on the scoring endpoint.
+
+$captured_events = array();
+$mock_score_status = 200;
+$mock_score_response = json_encode(array(
+    'score' => 20,
+    'band' => 'likely_bot',
+    'triggered_rule_ids' => array('honeypot-field-fill'),
+    'total_weight' => 80,
+));
+$sendMethod->invoke($plugin, 'honeypot_triggered', -80, array('field' => 'email_alt_xxx'));
+
+$event_calls = array_values(array_filter($captured_events, function ($c) {
+    return strpos($c['url'], '/api/v1/events') !== false;
+}));
+$sent = $event_calls[0];
+$body = json_decode($sent['args']['body'], true);
+assertEq($body['details']['score'], 20, 'API score merged into details');
+assertEq($body['details']['band'], 'likely_bot', 'API band merged into details');
+assertEq($body['details']['field'], 'email_alt_xxx', 'existing details keys still present');
+
+// Reset for later tests to see the default 503-scoring behavior.
+$mock_score_status = 503;
+$mock_score_response = '';
+
+// ---- Scoring fail-open: 200 with corrupted body ---------------------------
+//
+// A misconfigured proxy could return HTML "200 OK" pages under failure. The
+// fetch_score defensive shape check must catch this and return null — the
+// event still ships, but without score enrichment.
+
+$captured_events = array();
+$mock_score_status = 200;
+$mock_score_response = '<html>not json</html>';
+$sendMethod->invoke($plugin, 'honeypot_triggered', -80, array('field' => 'email_alt_xxx'));
+
+$event_calls = array_values(array_filter($captured_events, function ($c) {
+    return strpos($c['url'], '/api/v1/events') !== false;
+}));
+$sent = $event_calls[0];
+$body = json_decode($sent['args']['body'], true);
+assertTrue(!isset($body['details']['score']), 'no enrichment on non-JSON body');
+assertEq($body['type'], 'honeypot_triggered', 'event still fires even when scoring is corrupted');
+
+$mock_score_status = 503;
+$mock_score_response = '';
 
 // ---- Fail-open: wp_remote_post throws ------------------------------------
 
@@ -329,8 +436,11 @@ set_transient('rs_rl_login_' . md5('203.0.113.5'), 5, 300);
 $captured_events = array();
 $result = $check->invoke($plugin, null, 'admin', 'wrongpass');
 assertTrue($result instanceof WP_Error, 'attempt at threshold: returns WP_Error');
-assertTrue(count($captured_events) === 1, 'rate limit block fires a rate_limit_exceeded event');
-$evt_body = json_decode($captured_events[0]['args']['body'], true);
+$event_calls = array_values(array_filter($captured_events, function ($c) {
+    return strpos($c['url'], '/api/v1/events') !== false;
+}));
+assertTrue(count($event_calls) === 1, 'rate limit block fires a rate_limit_exceeded event');
+$evt_body = json_decode($event_calls[0]['args']['body'], true);
 assertEq($evt_body['type'], 'rate_limit_exceeded', 'rate limit event has correct type');
 
 // on_login_failed increments the counter.
@@ -352,7 +462,10 @@ $honeypot_name = $getHoneypotName->invoke($plugin);
 $captured_events = array();
 $_POST = array($honeypot_name => '');
 $check_comment->invoke($plugin, 42);
-assertEq(count($captured_events), 0, 'empty honeypot value does not trigger event');
+$event_calls = array_values(array_filter($captured_events, function ($c) {
+    return strpos($c['url'], '/api/v1/events') !== false;
+}));
+assertEq(count($event_calls), 0, 'empty honeypot value does not trigger event');
 
 // Filled field: event fires and wp_die is called (which real WP exits on).
 $captured_events = array();
@@ -361,8 +474,11 @@ $_POST = array($honeypot_name => 'spam-content');
 $check_comment->invoke($plugin, 42);
 assertTrue($wp_die_called !== null, 'filled honeypot triggers wp_die (block enabled)');
 assertTrue(is_array($wp_die_called) && isset($wp_die_called['args']['response']) && $wp_die_called['args']['response'] === 403, 'wp_die response code is 403');
-assertEq(count($captured_events), 1, 'filled honeypot fires exactly one event');
-$evt_body = json_decode($captured_events[0]['args']['body'], true);
+$event_calls = array_values(array_filter($captured_events, function ($c) {
+    return strpos($c['url'], '/api/v1/events') !== false;
+}));
+assertEq(count($event_calls), 1, 'filled honeypot fires exactly one event');
+$evt_body = json_decode($event_calls[0]['args']['body'], true);
 assertEq($evt_body['type'], 'honeypot_triggered', 'honeypot event has correct type');
 assertEq($evt_body['details']['context'], 'comment_form', 'honeypot event details.context is comment_form');
 assertEq($evt_body['details']['post_id'], 42, 'honeypot event details.post_id propagates');
